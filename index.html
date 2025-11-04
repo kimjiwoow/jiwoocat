@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다매체</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: url('cursor.png') 64 64, auto !important;
+        }
+
+        html {
+            overflow: hidden;
+            height: 100%;
+        }
+
+        body {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 1728px;
+            max-height: 1117px;
+            aspect-ratio: 1728 / 1117;
+            background-color: #92C8AA;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-link {
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .image-link img {
+            display: block;
+        }
+
+        #center-main-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            max-width: 60%;
+            max-height: 60%;
+            object-fit: contain;
+            transform: translate(-50%, -50%) translateX(-0.5cm) translateY(-0.5cm);
+        }
+
+    </style>
+</head>
+<body>
+    <a href="오른쪽 상단.html" class="image-link">
+        <img id="center-main-image" src="https://i.imgur.com/lTACHCk.png" alt="Center Main Image">
+    </a>
+</body>
+</html>
+
