@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>오른쪽 상단</title>
+    <title>다매체</title>
     <style>
         * {
             margin: 0;
@@ -12,530 +12,49 @@
             cursor: url('cursor.png') 64 64, auto !important;
         }
 
+        html {
+            overflow: hidden;
+            height: 100%;
+        }
+
         body {
-            width: 100vw;
-            height: 100vh;
-            background: #EFF0E1;
-            overflow: hidden;
             position: relative;
-        }
-
-        #imageWrapper {
             width: 100vw;
             height: 100vh;
-            overflow: hidden;
-            position: relative;
-            z-index: 1;
+            max-width: 1728px;
+            max-height: 1117px;
+            aspect-ratio: 1728 / 1117;
+            background-color: #92C8AA;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        #overlayImage {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            object-fit: cover;
-            object-position: center;
-            pointer-events: none;
-            z-index: 2;
+        .image-link {
+            display: inline-block;
+            text-decoration: none;
         }
 
-        #viewportWindow {
-            position: absolute;
-            width: 200px;
-            height: 200px;
-            border: 3px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-            background: rgba(0, 0, 0, 0.3);
-            display: none;
-            z-index: 3;
-            overflow: hidden;
-            pointer-events: none;
-            border-radius: 50%;
-            clip-path: circle(50%);
-            transform: translateZ(0);
-            will-change: transform, opacity;
-        }
-
-        #viewportWindow.visible {
+        .image-link img {
             display: block;
         }
 
-        #viewportContent {
-            width: 100%;
-            height: 100%;
-            background-image: url('https://i.imgur.com/3BHs65L.png');
-            background-size: auto;
-            background-position: center;
-            background-repeat: no-repeat;
-            will-change: transform;
-            transform: translateZ(0);
-            border-radius: 50%;
-        }
-
-        /* 팝업 모달 스타일 */
-        #popupModal {
-            position: fixed;
+        #center-main-image {
+            position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border-radius: 10px;
-            z-index: 1000;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 5px 30px rgba(0, 0, 0, 0.7);
-            max-width: 90vw;
-            max-height: 90vh;
+            max-width: 60%;
+            max-height: 60%;
+            object-fit: contain;
+            transform: translate(-50%, -50%) translateX(-0.5cm) translateY(-0.5cm);
         }
 
-        #popupModal.visible {
-            display: flex;
-        }
-
-        #popupModal img {
-            max-width: 100%;
-            max-height: 80vh;
-            display: block;
-            margin-bottom: 20px;
-            border-radius: 5px;
-        }
-
-        #closePopupButton {
-            padding: 12px 30px;
-            background-color: #fff;
-            color: #333;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: background-color 0.2s ease;
-        }
-
-        #closePopupButton:hover {
-            background-color: #eee;
-        }
     </style>
 </head>
 <body>
-    <div id="imageWrapper">
-        <!-- 배경 이미지 (첫 번째 이미지) - 좌표 계산용으로 숨김 -->
-        <img id="backgroundImage" src="https://i.imgur.com/3BHs65L.png" alt="배경 이미지" style="display: none;">
-        <img id="overlayImage" src="https://i.imgur.com/mp9QmC4.png" alt="오버레이 이미지">
-    </div>
-    <div id="viewportWindow">
-        <div id="viewportContent"></div>
-    </div>
-    
-    <!-- 팝업 모달 -->
-    <div id="popupModal">
-        <img src="https://i.imgur.com/5LCW2pi.jpeg" alt="팝업 이미지">
-        <button id="closePopupButton">닫기</button>
-    </div>
-
-    <script>
-        const viewportWindow = document.getElementById('viewportWindow');
-        const viewportContent = document.getElementById('viewportContent');
-        const popupModal = document.getElementById('popupModal');
-        const popupImage = popupModal.querySelector('img');
-        const closePopupButton = document.getElementById('closePopupButton');
-        const backgroundImage = document.getElementById('backgroundImage');
-        
-        let mouseX = 0;
-        let mouseY = 0;
-        let currentBgX = 0;
-        let currentBgY = 0;
-        let targetBgX = 0;
-        let targetBgY = 0;
-        let isHovering = false; // 마우스 호버 상태
-        let isTouching = false; // 터치 상태
-        let rafId = null; // requestAnimationFrame ID
-        const bgScale = 10; // 고정된 확대 배율 (더 확대)
-        const lerpSpeed = 0.2; // 보간 속도 (성능 향상을 위해 약간 증가)
-
-        // 고양이 위치 영역 (갈색 사각형 위의 고양이 - 첫 번째 이미지 원본 기준 픽셀 좌표)
-        let originalImageWidth = 1920;  // 기본값, 이미지 로드 후 업데이트
-        let originalImageHeight = 1080; // 기본값, 이미지 로드 후 업데이트
-        // 고양이 위치 영역을 좀 더 넓게 설정 (감지가 안 될 수 있으니)
-        const catArea = {
-            left: 1100,    // 원본 이미지에서의 픽셀 좌표 (약간 넓게)
-            top: 350,      // 원본 이미지에서의 픽셀 좌표 (약간 넓게)
-            right: 1500,   // 원본 이미지에서의 픽셀 좌표 (약간 넓게)
-            bottom: 570    // 원본 이미지에서의 픽셀 좌표 (약간 넓게)
-        };
-        
-        let isMouseOnCat = false; // 고양이 위치에 마우스가 있는지
-
-        // 배경 이미지 로드 후 실제 크기 가져오기
-        function updateImageSize() {
-            if (backgroundImage.complete && backgroundImage.naturalWidth > 0) {
-                originalImageWidth = backgroundImage.naturalWidth;
-                originalImageHeight = backgroundImage.naturalHeight;
-            }
-        }
-        
-        backgroundImage.addEventListener('load', updateImageSize);
-        // 이미 로드된 경우를 대비
-        if (backgroundImage.complete) {
-            updateImageSize();
-        }
-
-        // 화면 좌표를 첫 번째 이미지(배경 이미지)의 원본 좌표로 변환
-        function screenToImageCoordinates(screenX, screenY) {
-            // 오버레이 이미지가 object-fit: cover로 표시될 때의 실제 렌더링 영역 계산
-            // 배경 이미지도 같은 위치에 같은 방식으로 표시된다고 가정
-            const overlayImage = document.getElementById('overlayImage');
-            
-            // 이미지의 실제 표시 영역 (cover로 인한 크롭)
-            const imageAspect = originalImageWidth / originalImageHeight;
-            const screenAspect = window.innerWidth / window.innerHeight;
-            
-            let imageDisplayWidth, imageDisplayHeight;
-            let imageOffsetX = 0, imageOffsetY = 0;
-            
-            if (screenAspect > imageAspect) {
-                // 화면이 더 넓음 - 세로로 맞춤 (좌우 여백)
-                imageDisplayHeight = window.innerHeight;
-                imageDisplayWidth = imageDisplayHeight * imageAspect;
-                imageOffsetX = (window.innerWidth - imageDisplayWidth) / 2;
-            } else {
-                // 화면이 더 높음 - 가로로 맞춤 (상하 여백)
-                imageDisplayWidth = window.innerWidth;
-                imageDisplayHeight = imageDisplayWidth / imageAspect;
-                imageOffsetY = (window.innerHeight - imageDisplayHeight) / 2;
-            }
-            
-            // 화면 좌표를 이미지 표시 영역 내부 좌표로 변환
-            const relativeX = screenX - imageOffsetX;
-            const relativeY = screenY - imageOffsetY;
-            
-            // 이미지 픽셀 좌표로 변환
-            const imageX = (relativeX / imageDisplayWidth) * originalImageWidth;
-            const imageY = (relativeY / imageDisplayHeight) * originalImageHeight;
-            
-            return { x: imageX, y: imageY };
-        }
-
-        // 마우스가 고양이 위치 영역 안에 있는지 확인 (화면 좌표 기준으로 간단하게)
-        function isMouseOnCatArea(screenX, screenY) {
-            // 화면 크기 기준으로 상단 오른쪽 영역 감지 (더 작게, 새 위치와 겹치지 않도록)
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
-            
-            // 상단 오른쪽 영역 (새 위치와 겹치지 않도록 세로를 45% 이하로 제한)
-            const areaLeft = screenWidth * 0.55;  // 화면의 55% 지점부터
-            const areaTop = screenHeight * 0.05;  // 화면의 5% 지점부터
-            const areaRight = screenWidth * 0.95; // 화면의 95% 지점까지
-            const areaBottom = screenHeight * 0.40; // 화면의 40% 지점까지 (45%에서 40%로 줄임)
-            
-            const isInArea = screenX >= areaLeft && 
-                           screenX <= areaRight &&
-                           screenY >= areaTop && 
-                           screenY <= areaBottom;
-            
-            return isInArea;
-        }
-
-        // 새로운 위치 영역 감지 (화면 중앙 하단 영역 - 더 넓게)
-        function isMouseOnNewArea(screenX, screenY) {
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
-            
-            // 화면 중앙 하단 영역 (고양이 위치와 겹치지 않도록 세로를 50% 이상으로 시작)
-            const areaLeft = screenWidth * 0.25;  // 화면의 25% 지점부터
-            const areaTop = screenHeight * 0.50;  // 화면의 50% 지점부터 (45%에서 50%로 변경)
-            const areaRight = screenWidth * 0.75; // 화면의 75% 지점까지
-            const areaBottom = screenHeight * 0.90; // 화면의 90% 지점까지
-            
-            const isInArea = screenX >= areaLeft && 
-                           screenX <= areaRight &&
-                           screenY >= areaTop && 
-                           screenY <= areaBottom;
-            
-            return isInArea;
-        }
-        
-        // 고양이 위치를 화면 좌표로 변환
-        function imageToScreenCoordinates(imageX, imageY) {
-            const imageAspect = originalImageWidth / originalImageHeight;
-            const screenAspect = window.innerWidth / window.innerHeight;
-            
-            let imageDisplayWidth, imageDisplayHeight;
-            let imageOffsetX = 0, imageOffsetY = 0;
-            
-            if (screenAspect > imageAspect) {
-                imageDisplayHeight = window.innerHeight;
-                imageDisplayWidth = imageDisplayHeight * imageAspect;
-                imageOffsetX = (window.innerWidth - imageDisplayWidth) / 2;
-            } else {
-                imageDisplayWidth = window.innerWidth;
-                imageDisplayHeight = imageDisplayWidth / imageAspect;
-                imageOffsetY = (window.innerHeight - imageDisplayHeight) / 2;
-            }
-            
-            const screenX = (imageX / originalImageWidth) * imageDisplayWidth + imageOffsetX;
-            const screenY = (imageY / originalImageHeight) * imageDisplayHeight + imageOffsetY;
-            
-            return { x: screenX, y: screenY };
-        }
-
-        // 팝업 표시 (이미지 URL 전달)
-        function showPopup(imageUrl) {
-            if (imageUrl) {
-                popupImage.src = imageUrl;
-            }
-            popupModal.classList.add('visible');
-        }
-
-        // 팝업 숨김
-        function hidePopup() {
-            popupModal.classList.remove('visible');
-        }
-
-        function calculateViewport() {
-            // 고양이 위치에 마우스가 있는지 확인 (팝업 트리거용)
-            isMouseOnCat = isMouseOnCatArea(mouseX, mouseY);
-            
-            // 호버 또는 터치 상태일 때만 뷰포트 표시
-            if (!isHovering && !isTouching) {
-                viewportWindow.style.display = 'none';
-                viewportWindow.classList.remove('visible');
-                return;
-            }
-            
-            // 뷰포트 크기 (원형이므로 같은 크기)
-            const viewportSize = 200;
-            
-            // 마우스/터치 위치 근처에 뷰포트 창 배치 (오프셋 추가)
-            const offsetX = 20; // 오른쪽으로 20px
-            const offsetY = 20; // 아래로 20px
-            
-            let viewportX = mouseX + offsetX;
-            let viewportY = mouseY + offsetY;
-            
-            // 화면 밖으로 나가지 않도록 조정
-            if (viewportX + viewportSize > window.innerWidth) {
-                viewportX = mouseX - viewportSize - offsetX; // 왼쪽에 표시
-            }
-            if (viewportY + viewportSize > window.innerHeight) {
-                viewportY = mouseY - viewportSize - offsetY; // 위에 표시
-            }
-            
-            // 위치 설정
-            viewportWindow.style.left = `${viewportX}px`;
-            viewportWindow.style.top = `${viewportY}px`;
-            viewportWindow.style.right = 'auto';
-            viewportWindow.style.bottom = 'auto';
-            
-            // 뷰포트 창 표시
-            viewportWindow.style.display = 'block';
-            viewportWindow.classList.add('visible');
-            
-            // 원본 이미지 비율 계산
-            const imageAspect = originalImageWidth / originalImageHeight;
-            
-            // 확대된 배경 이미지 크기 (원본 비율 유지)
-            // 뷰포트가 정사각형이므로, 더 긴 쪽을 기준으로 확대
-            let bgWidth, bgHeight;
-            if (imageAspect > 1) {
-                // 가로가 더 긴 경우 (16:9 등)
-                bgWidth = viewportSize * bgScale;
-                bgHeight = bgWidth / imageAspect;
-            } else {
-                // 세로가 더 긴 경우
-                bgHeight = viewportSize * bgScale;
-                bgWidth = bgHeight * imageAspect;
-            }
-            
-            // 마우스 위치를 이미지 좌표로 변환
-            const imageCoords = screenToImageCoordinates(mouseX, mouseY);
-            
-            // 배경 이미지 위치 계산 (마우스 위치를 중심으로)
-            const centerXPercent = imageCoords.x / originalImageWidth;
-            const centerYPercent = imageCoords.y / originalImageHeight;
-            
-            // 배경 이미지 이동 범위 계산
-            const maxOffsetX = bgWidth - viewportSize;
-            const maxOffsetY = bgHeight - viewportSize;
-            
-            // 목표 배경 위치 계산 (마우스 위치를 중심으로)
-            targetBgX = -(centerXPercent * maxOffsetX);
-            targetBgY = -(centerYPercent * maxOffsetY);
-            
-            // 원본 비율 유지하면서 배경 크기 설정
-            viewportContent.style.backgroundSize = `${bgWidth}px ${bgHeight}px`;
-        }
-
-        function updateViewport() {
-            // 현재 위치와 목표 위치 사이를 부드럽게 보간
-            const diffX = targetBgX - currentBgX;
-            const diffY = targetBgY - currentBgY;
-            
-            // 충분히 가까우면 즉시 업데이트 (성능 최적화)
-            if (Math.abs(diffX) < 0.1 && Math.abs(diffY) < 0.1) {
-                currentBgX = targetBgX;
-                currentBgY = targetBgY;
-            } else {
-                currentBgX += diffX * lerpSpeed;
-                currentBgY += diffY * lerpSpeed;
-            }
-            
-            // backgroundPosition 사용 (더 안정적)
-            viewportContent.style.backgroundPosition = `${currentBgX}px ${currentBgY}px`;
-        }
-
-        // 마우스 움직임 감지 (throttle 적용)
-        let lastMoveTime = 0;
-        const moveThrottle = 16; // ~60fps
-        
-        function handleMove(x, y) {
-            mouseX = x;
-            mouseY = y;
-            calculateViewport();
-        }
-        
-        // 마우스 움직임 감지 (데스크톱)
-        document.addEventListener('mousemove', (e) => {
-            const now = performance.now();
-            if (now - lastMoveTime >= moveThrottle) {
-                isHovering = true;
-                handleMove(e.clientX, e.clientY);
-                lastMoveTime = now;
-            }
-        });
-
-        // 마우스 호버 시작 (body에 마우스 진입)
-        document.body.addEventListener('mouseenter', () => {
-            isHovering = true;
-            calculateViewport();
-        });
-
-        // 마우스 호버 종료 (body에서 마우스 나감)
-        document.body.addEventListener('mouseleave', () => {
-            isHovering = false;
-            viewportWindow.style.display = 'none';
-            viewportWindow.classList.remove('visible');
-        });
-
-        // 터치 이벤트 감지 (모바일 지원)
-        document.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            isTouching = true;
-            const touch = e.touches[0];
-            handleMove(touch.clientX, touch.clientY);
-        }, { passive: false });
-
-        document.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (e.touches.length > 0) {
-                const touch = e.touches[0];
-                const now = performance.now();
-                if (now - lastMoveTime >= moveThrottle) {
-                    handleMove(touch.clientX, touch.clientY);
-                    lastMoveTime = now;
-                }
-            }
-        }, { passive: false });
-
-        document.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isTouching = false;
-            viewportWindow.style.display = 'none';
-            viewportWindow.classList.remove('visible');
-        }, { passive: false });
-
-        document.addEventListener('touchcancel', (e) => {
-            e.preventDefault();
-            isTouching = false;
-            viewportWindow.style.display = 'none';
-            viewportWindow.classList.remove('visible');
-        }, { passive: false });
-
-        // 우클릭 이벤트 감지 - 고양이 위치에서만 작동
-        document.addEventListener('contextmenu', (e) => {
-            if (isMouseOnCatArea(e.clientX, e.clientY)) {
-                e.preventDefault(); // 기본 컨텍스트 메뉴 방지
-                showPopup('https://i.imgur.com/5LCW2pi.jpeg');
-            }
-        });
-
-        // 스페이스바 이벤트 감지 - 위치에 따라 다른 이미지 표시
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && !e.repeat) {
-                e.preventDefault();
-                // 현재 마우스 위치에서 확인
-                const onNewArea = isMouseOnNewArea(mouseX, mouseY);
-                const onCatArea = isMouseOnCatArea(mouseX, mouseY);
-                
-                console.log('=== 스페이스바 눌림 ===');
-                console.log('마우스 위치:', mouseX, mouseY);
-                console.log('새 위치 감지:', onNewArea);
-                console.log('고양이 위치 감지:', onCatArea);
-                
-                // 새 위치를 먼저 체크 (우선순위 높음)
-                if (onNewArea) {
-                    // 새로운 위치에서 두 번째 이미지
-                    console.log('>>> 새 위치에서 팝업 열기');
-                    console.log('>>> 이미지 URL: https://i.imgur.com/nOGcDg8.jpeg');
-                    showPopup('https://i.imgur.com/nOGcDg8.jpeg');
-                    return;
-                }
-                
-                // 고양이 위치 체크
-                if (onCatArea) {
-                    // 고양이 위치에서 첫 번째 이미지
-                    console.log('>>> 고양이 위치에서 팝업 열기');
-                    console.log('>>> 이미지 URL: https://i.imgur.com/5LCW2pi.jpeg');
-                    showPopup('https://i.imgur.com/5LCW2pi.jpeg');
-                    return;
-                }
-                
-                console.log('>>> 감지된 영역 없음');
-            }
-        });
-
-        // 팝업 닫기 버튼 이벤트
-        closePopupButton.addEventListener('click', () => {
-            hidePopup();
-        });
-
-        // 팝업 배경 클릭 시 닫기
-        popupModal.addEventListener('click', (e) => {
-            if (e.target === popupModal) {
-                hidePopup();
-            }
-        });
-
-        // ESC 키로 팝업 닫기
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && popupModal.classList.contains('visible')) {
-                hidePopup();
-            }
-        });
-
-        // 부드러운 애니메이션 루프 (최적화)
-        function animate() {
-            updateViewport();
-            rafId = requestAnimationFrame(animate);
-        }
-        
-        // 초기 상태 (호버 전에는 숨김)
-        isHovering = false;
-        isTouching = false;
-        
-        // 애니메이션 시작
-        animate();
-        
-        // 페이지 언로드 시 정리
-        window.addEventListener('beforeunload', () => {
-            if (rafId) {
-                cancelAnimationFrame(rafId);
-            }
-        });
-    </script>
+    <a href="오른쪽 상단.html" class="image-link">
+        <img id="center-main-image" src="https://i.imgur.com/lTACHCk.png" alt="Center Main Image">
+    </a>
 </body>
 </html>
