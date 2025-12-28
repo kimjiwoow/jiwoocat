@@ -42,7 +42,7 @@
 
         #viewportWindow {
             position: absolute;
-            width: 300px;
+            width: 200px;
             height: 200px;
             border: 3px solid rgba(255, 255, 255, 0.8);
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
@@ -51,6 +51,10 @@
             z-index: 3;
             overflow: hidden;
             pointer-events: none;
+            border-radius: 50%;
+            clip-path: circle(50%);
+            transform: translateZ(0);
+            will-change: transform, opacity;
         }
 
         #viewportWindow.visible {
@@ -61,10 +65,12 @@
             width: 100%;
             height: 100%;
             background-image: url('https://i.imgur.com/3BHs65L.png');
-            background-size: cover;
+            background-size: auto;
             background-position: center;
             background-repeat: no-repeat;
-            will-change: background-position;
+            will-change: transform;
+            transform: translateZ(0);
+            border-radius: 50%;
         }
 
         /* 팝업 모달 스타일 */
@@ -119,7 +125,7 @@
     <div id="imageWrapper">
         <!-- 배경 이미지 (첫 번째 이미지) - 좌표 계산용으로 숨김 -->
         <img id="backgroundImage" src="https://i.imgur.com/3BHs65L.png" alt="배경 이미지" style="display: none;">
-        <img id="overlayImage" src="https://i.imgur.com/eSHVuPy.png" alt="오버레이 이미지">
+        <img id="overlayImage" src="https://i.imgur.com/mp9QmC4.png" alt="오버레이 이미지">
     </div>
     <div id="viewportWindow">
         <div id="viewportContent"></div>
@@ -145,8 +151,11 @@
         let currentBgY = 0;
         let targetBgX = 0;
         let targetBgY = 0;
-        const bgScale = 6; // 고정된 확대 배율 (더 확대)
-        const lerpSpeed = 0.15; // 보간 속도 (0.1 ~ 1, 작을수록 더 부드럽지만 느림)
+        let isHovering = false; // 마우스 호버 상태
+        let isTouching = false; // 터치 상태
+        let rafId = null; // requestAnimationFrame ID
+        const bgScale = 10; // 고정된 확대 배율 (더 확대)
+        const lerpSpeed = 0.2; // 보간 속도 (성능 향상을 위해 약간 증가)
 
         // 고양이 위치 영역 (갈색 사각형 위의 고양이 - 첫 번째 이미지 원본 기준 픽셀 좌표)
         let originalImageWidth = 1920;  // 기본값, 이미지 로드 후 업데이트
@@ -291,25 +300,56 @@
             // 고양이 위치에 마우스가 있는지 확인 (팝업 트리거용)
             isMouseOnCat = isMouseOnCatArea(mouseX, mouseY);
             
-            // 뷰포트는 항상 표시
-            // 뷰포트 창 위치 설정 (오른쪽 상단)
-            viewportWindow.style.top = '20px';
-            viewportWindow.style.right = '20px';
-            viewportWindow.style.left = 'auto';
+            // 호버 또는 터치 상태일 때만 뷰포트 표시
+            if (!isHovering && !isTouching) {
+                viewportWindow.style.display = 'none';
+                viewportWindow.classList.remove('visible');
+                return;
+            }
+            
+            // 뷰포트 크기 (원형이므로 같은 크기)
+            const viewportSize = 200;
+            
+            // 마우스/터치 위치 근처에 뷰포트 창 배치 (오프셋 추가)
+            const offsetX = 20; // 오른쪽으로 20px
+            const offsetY = 20; // 아래로 20px
+            
+            let viewportX = mouseX + offsetX;
+            let viewportY = mouseY + offsetY;
+            
+            // 화면 밖으로 나가지 않도록 조정
+            if (viewportX + viewportSize > window.innerWidth) {
+                viewportX = mouseX - viewportSize - offsetX; // 왼쪽에 표시
+            }
+            if (viewportY + viewportSize > window.innerHeight) {
+                viewportY = mouseY - viewportSize - offsetY; // 위에 표시
+            }
+            
+            // 위치 설정
+            viewportWindow.style.left = `${viewportX}px`;
+            viewportWindow.style.top = `${viewportY}px`;
+            viewportWindow.style.right = 'auto';
             viewportWindow.style.bottom = 'auto';
             
             // 뷰포트 창 표시
             viewportWindow.style.display = 'block';
             viewportWindow.classList.add('visible');
             
-            // 뷰포트 크기
-            const viewportRect = viewportWindow.getBoundingClientRect();
-            const viewportWidth = viewportRect.width;
-            const viewportHeight = viewportRect.height;
+            // 원본 이미지 비율 계산
+            const imageAspect = originalImageWidth / originalImageHeight;
             
-            // 확대된 배경 이미지 크기
-            const bgWidth = viewportWidth * bgScale;
-            const bgHeight = viewportHeight * bgScale;
+            // 확대된 배경 이미지 크기 (원본 비율 유지)
+            // 뷰포트가 정사각형이므로, 더 긴 쪽을 기준으로 확대
+            let bgWidth, bgHeight;
+            if (imageAspect > 1) {
+                // 가로가 더 긴 경우 (16:9 등)
+                bgWidth = viewportSize * bgScale;
+                bgHeight = bgWidth / imageAspect;
+            } else {
+                // 세로가 더 긴 경우
+                bgHeight = viewportSize * bgScale;
+                bgWidth = bgHeight * imageAspect;
+            }
             
             // 마우스 위치를 이미지 좌표로 변환
             const imageCoords = screenToImageCoordinates(mouseX, mouseY);
@@ -319,30 +359,101 @@
             const centerYPercent = imageCoords.y / originalImageHeight;
             
             // 배경 이미지 이동 범위 계산
-            const maxOffsetX = bgWidth - viewportWidth;
-            const maxOffsetY = bgHeight - viewportHeight;
+            const maxOffsetX = bgWidth - viewportSize;
+            const maxOffsetY = bgHeight - viewportSize;
             
             // 목표 배경 위치 계산 (마우스 위치를 중심으로)
             targetBgX = -(centerXPercent * maxOffsetX);
             targetBgY = -(centerYPercent * maxOffsetY);
             
+            // 원본 비율 유지하면서 배경 크기 설정
             viewportContent.style.backgroundSize = `${bgWidth}px ${bgHeight}px`;
         }
 
         function updateViewport() {
             // 현재 위치와 목표 위치 사이를 부드럽게 보간
-            currentBgX += (targetBgX - currentBgX) * lerpSpeed;
-            currentBgY += (targetBgY - currentBgY) * lerpSpeed;
+            const diffX = targetBgX - currentBgX;
+            const diffY = targetBgY - currentBgY;
             
+            // 충분히 가까우면 즉시 업데이트 (성능 최적화)
+            if (Math.abs(diffX) < 0.1 && Math.abs(diffY) < 0.1) {
+                currentBgX = targetBgX;
+                currentBgY = targetBgY;
+            } else {
+                currentBgX += diffX * lerpSpeed;
+                currentBgY += diffY * lerpSpeed;
+            }
+            
+            // backgroundPosition 사용 (더 안정적)
             viewportContent.style.backgroundPosition = `${currentBgX}px ${currentBgY}px`;
         }
 
-        // 마우스 움직임 감지
+        // 마우스 움직임 감지 (throttle 적용)
+        let lastMoveTime = 0;
+        const moveThrottle = 16; // ~60fps
+        
+        function handleMove(x, y) {
+            mouseX = x;
+            mouseY = y;
+            calculateViewport();
+        }
+        
+        // 마우스 움직임 감지 (데스크톱)
         document.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
+            const now = performance.now();
+            if (now - lastMoveTime >= moveThrottle) {
+                isHovering = true;
+                handleMove(e.clientX, e.clientY);
+                lastMoveTime = now;
+            }
+        });
+
+        // 마우스 호버 시작 (body에 마우스 진입)
+        document.body.addEventListener('mouseenter', () => {
+            isHovering = true;
             calculateViewport();
         });
+
+        // 마우스 호버 종료 (body에서 마우스 나감)
+        document.body.addEventListener('mouseleave', () => {
+            isHovering = false;
+            viewportWindow.style.display = 'none';
+            viewportWindow.classList.remove('visible');
+        });
+
+        // 터치 이벤트 감지 (모바일 지원)
+        document.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isTouching = true;
+            const touch = e.touches[0];
+            handleMove(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                const now = performance.now();
+                if (now - lastMoveTime >= moveThrottle) {
+                    handleMove(touch.clientX, touch.clientY);
+                    lastMoveTime = now;
+                }
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isTouching = false;
+            viewportWindow.style.display = 'none';
+            viewportWindow.classList.remove('visible');
+        }, { passive: false });
+
+        document.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            isTouching = false;
+            viewportWindow.style.display = 'none';
+            viewportWindow.classList.remove('visible');
+        }, { passive: false });
 
         // 우클릭 이벤트 감지 - 고양이 위치에서만 작동
         document.addEventListener('contextmenu', (e) => {
@@ -406,16 +517,25 @@
             }
         });
 
-        // 부드러운 애니메이션 루프
+        // 부드러운 애니메이션 루프 (최적화)
         function animate() {
             updateViewport();
-            requestAnimationFrame(animate);
+            rafId = requestAnimationFrame(animate);
         }
         
-        // 초기 뷰포트 표시
-        calculateViewport();
+        // 초기 상태 (호버 전에는 숨김)
+        isHovering = false;
+        isTouching = false;
         
+        // 애니메이션 시작
         animate();
+        
+        // 페이지 언로드 시 정리
+        window.addEventListener('beforeunload', () => {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+            }
+        });
     </script>
 </body>
 </html>
